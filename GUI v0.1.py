@@ -22,70 +22,142 @@ import imageio as iio
 class Rover(QtGui.QMainWindow):
     def __init__(self):
         super(Rover, self).__init__()
-        
-        
-        #test data
-        self.spectra = []
-        self.wavenumber = []
-        self.pixels=1952
-        self.HOST_TO_DEVICE=0x40
-        self.DEVICE_TO_HOST=0xC0
-        self.BUFFER_SIZE = 8
-        self.integration_time = 500 #integration time
-        self.averages = 2
-        self.gain = 20  # gain
-        self.laser_power = 100
-        self.thread_active = False
-        self.stage_moving = False
-        self.thread_to_GUI = queue.Queue()
-        self.plots_drawn = [0,0,0,0]  # keep track of which plots have been gathered... allows reset once complete
-        
-        try:        
-            self.connect_stage()
-            self.checkSerial = QtCore.QTimer()
-            self.checkSerial.setSingleShot(False)
-            self.checkSerial.timeout.connect(lambda: self.check_serial())
-            self.checkSerial.start(100)
-            
-            
-            self.webcam = iio.get_reader("<video1>")
-            self.checkCamera = QtCore.QTimer()
-            self.checkCamera.setSingleShot(False)
-            self.checkCamera.timeout.connect(lambda: self.display_image())
-            self.checkCamera.start(50)
-            
-        except Exception as e:
-            print("Did not connect with stage")
-            print(e)
-        
-        try:        
-            self.instalise_spectrometer()
+        arm_address = ""
+        wheel_address = ""
+        fps = 15
+        # # connect to power/arm board
+        # self.arm = serial.Serial(port=arm_address, baudrate=115200, timeout=0.5)
+        # time.sleep(1) #essential to have this delay!
+        # self.arm.write(str.encode("/hello;\n"))
 
-        except Exception as e:
-            print("Did not connect with spectrometer")
-            print(e)
-                
-        with open('data.csv') as csvDataFile:
-            csvReader = csv.reader(csvDataFile)
-            for row in csvReader:
-                self.wavenumber.append(float(row[0]))
-            self.wavenumber = self.wavenumber[0:1947]
-        
-        
+        # reply = self.arm.readline().strip()
+        # print('reply:',reply)
+        # if reply == b'power and arm board':
+        #     print('power board connection established')
+        # else:
+        #     print('no power board connection')
+        #     self.arm.close()
+        # # connect to wheels board
+        # self.wheel = serial.Serial(port=wheel_address, baudrate=115200, timeout=0.5)
+        # time.sleep(1) #essential to have this delay!
+        # self.wheel.write(str.encode("/hello;\n"))
 
+        # reply = self.wheel.readline().strip()
+        # print('reply:',reply)
+        # if reply == b'wheels board':
+        #     print('wheel board connection established')
+        # else:
+        #     print('no wheels board connection')
+        #     self.wheel.close()
+        
+        # build GUI
         self.initUI()
-        time.sleep(0.2)   
+        
+        # connect to cameras
+        # self.cam1 = iio.get_reader("<video0>")
+        # # self.cam2 = iio.get_reader("<video2>")
+        # self.getCamFeed = QtCore.QTimer()
+        # self.getCamFeed.setSingleShot(False)
+        # self.getCamFeed.timeout.connect(lambda: self.display_cams())
+        # refresh_interval = int(1000/fps)
+        # self.getCamFeed.start(refresh_interval) 
+        
+        # connect to spectrometer
+        
+        
+        
     
+    def display_cams(self):
+        frame = self.cam1.get_next_data()
+        print(frame)
+        image = np.rot90(frame,3) #        image flip (horizontal axis) and rotation (90 deg anti-clockwise)
+        image = np.fliplr(image)
+        self.cameraplot.setImage(image, autoLevels=False)
+    
+    
+ #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                #Setup main Window
+ #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    def initUI(self):
+
+        self.setWindowTitle('Rover Control Panel')
+        palette = QtGui.QPalette()
+        palette.setColor(QtGui.QPalette.Background, QtGui.QColor(78,78,78))
+        self.setPalette(palette)
+        
+        sizePolicyMin = QtGui.QSizePolicy(QtGui.QSizePolicy.Minimum, QtGui.QSizePolicy.Minimum)
+        sizePolicyMin.setHorizontalStretch(0)
+        sizePolicyMin.setVerticalStretch(0)
+        screen       =  QtGui.QApplication.desktop().screenGeometry().getCoords()
+        screenHeight = screen[-1]
+        screenWidth  = screen[-2]
+        self.setGeometry(0, 0, screenWidth*1, screenHeight*1)
+         
+         
+         
+ #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                #Setup Panes/Tabs
+ #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# BOXES
+        self.TimerBox                   = QtGui.QGroupBox('Countdown Timer')
+        self.Cam1Box                    = QtGui.QGroupBox('Mast Cam')
+        self.Cam2Box                    = QtGui.QGroupBox('Arm Cam')
+        self.SpectraBox                 = QtGui.QGroupBox('Spectrometer')
+        self.ArmBox                     = QtGui.QGroupBox('Arm')
+        self.WheelsBox                  = QtGui.QGroupBox('Wheels')
+        self.PowerBox                   = QtGui.QGroupBox('Power')
 
 
+        
+        
+        
+        # TimerFont = QtGui.QFont("Times", 90, QtGui.QFont.Bold) 
+        # i.setFont(newfont)
+        # i.setStyleSheet("border: 3px solid white;")
+  
+        # graphs
+        self.plot_1                    = pg.PlotWidget()
+        self.plot_1.setYRange(0,65000)
+
+        
+        # camera
+        self.cameraplot                    = pg.ImageView(view=pg.PlotItem())
+        print(self.cameraplot)
+        self.cameraplot.ui.roiBtn.hide()
+        self.cameraplot.ui.menuBtn.hide()
+        self.cameraplot.setLevels(0,125)
+#==============================================================================
+# Overall assembly
+#==============================================================================
+        self.WidgetGroup                   = QtGui.QGroupBox('')
+        self.WidgetGroup.setLayout(QtGui.QGridLayout())
+         
+        self.WidgetGroup.layout().addWidget(self.TimerBox,                      0, 0, 5, 12)
+        self.WidgetGroup.layout().addWidget(self.Cam1Box,                       0, 12,8, 8)
+        self.WidgetGroup.layout().addWidget(self.Cam2Box,                       8, 12,8, 8)
+        self.WidgetGroup.layout().addWidget(self.SpectraBox,                    5, 0, 5, 12)
+        self.WidgetGroup.layout().addWidget(self.ArmBox,                        10,0, 6, 4)               
+        self.WidgetGroup.layout().addWidget(self.WheelsBox,                     10,4, 6, 4) 
+        self.WidgetGroup.layout().addWidget(self.PowerBox,                      10,8, 6, 4)    
+        self.setCentralWidget(self.WidgetGroup)
+        
+
+# Signal square
+        self.signal                     = QtGui.QLabel()  
+        self.signal.setGeometry(QtCore.QRect(100,100,50,50))
+        self.signal.setText("hello")
+        self.signal.setStyleSheet("background-color: yellow")
+        self.signal.move(200,300)
+        self.show()
 
 
-
-
-
-
-
-
+    def closeEvent(self, event): #to do upon GUI being closed
+        # self.checkSerial.stop()
+        # self.arm.close()
+        # self.wheel.close()
+        # self.cam1.close()
+        pass
 
 if __name__ == '__main__':
     app = 0
