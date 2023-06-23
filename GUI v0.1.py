@@ -29,7 +29,17 @@ class Rover(QtGui.QMainWindow):
         self.spectrometer_connected = False
         self.thread_to_GUI = queue.Queue()
         self.thread_active = False
-        
+        self.spectra = []
+        self.wavenumbers = []
+        self.pixels=1952
+        self.HOST_TO_DEVICE=0x40
+        self.DEVICE_TO_HOST=0xC0
+        self.BUFFER_SIZE = 8
+        self.integration_time = 500 #integration time
+        self.averages = 2
+        self.gain = 20  # gain
+        self.laser_power = 100
+ 
         
         # # connect to power/arm board
         self.arm = serial.Serial(port=arm_address, baudrate=115200, timeout=0.5)
@@ -136,7 +146,12 @@ class Rover(QtGui.QMainWindow):
         self.thread_to_GUI.put([b_spec])  #returns spectra via a queue (thread safe)
         print("spectra added to queue")
         
-    def display_spectra    
+    def display_spectra(self, b_spec):
+        self.spec_plot.getPlotItem().clear()
+        self.spec_plot.plot(x=self.wavenumbers,y=b_spec)
+        
+        
+        
     def instalise_spectrometer(self):
         bus = WasatchBus()
         device_id = bus.device_ids[0]
@@ -161,7 +176,15 @@ class Rover(QtGui.QMainWindow):
         self.dev.settings.state.scans_to_average = self.averages
         self.dev.settings.state.free_running_mode= False
         self.dev.settings.state.raman_mode_enabled = True
-        self.wavenumbers = device.settings.wavenumbers[0:-5]    
+        self.wavenumbers = device.settings.wavenumbers    
+    
+    def normalise(self, _in):
+
+        scaled = np.interp(_in,(_in.min(),_in.max()),(0,65000))
+        kernel = [0.2, 0.2, 0.2, 0.2, 0.2]
+        smoothed = np.convolve(scaled, kernel, mode='same')
+        return smoothed
+    
     def update_power_arm(self):
         self.arm.write(str.encode("/report_power;"))
         reply = self.arm.readline().strip()
@@ -246,6 +269,13 @@ class Rover(QtGui.QMainWindow):
         self.cam2plot.ui.histogram.hide()
         self.cam2plot.setLevels(0,255)
         self.Cam2Box.layout().addWidget(self.cam2plot,                          0,0,10,10)
+        
+        
+ # SPECTROMETER
+        self.SpectraBox.setLayout(QtGui.QGridLayout())
+        self.spec_plot                    = pg.PlotWidget()
+        self.spec_plot.setYRange(0,65000)
+        self.SpectraBox.layout().addWidget(self.spec_plot,                      0,8,3,8)
 #==============================================================================
 # Overall assembly
 #==============================================================================
