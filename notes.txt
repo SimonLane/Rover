@@ -9,6 +9,27 @@ conda install -c anaconda pyqt
 conda install -c anaconda pyqtgraph
 conda install -c conda-forge imageio
 
+# Install OpenCV
+conda config --add channels conda-forge
+conda install libopencv opencv py-opencv
+^^^
+did not do the job DLL missing!!!
+
+see https://stackoverflow.com/a/30281466
+downloaded opencv_python‑4.5.5‑cp311‑cp311‑win_amd64.whl from https://www.lfd.uci.edu/~gohlke/pythonlibs/#opencv
+(C:\Users\mbp20\Rover\envs) C:\Users\mbp20\Rover>pip install ..\Downloads\opencv_python-4.5.5-cp311-cp311-win_amd64.whl
+Works now
+
+# libusb1
+An operation is not supported
+https://zadig.akeo.ie/
+
+--- WAS code its not using libusb0 which it thought it was
+INstalled  libusb-win32, to try and get usb0
+https://sourceforge.net/projects/libusb-win32/files/latest/download
+
+
+
 conda list --explicit > spec-file.txt
 conda env export > environment.yml
 

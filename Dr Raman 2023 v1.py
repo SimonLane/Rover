@@ -18,12 +18,12 @@ import numpy as np
 Polynomial = np.polynomial.Polynomial
 import csv, threading, queue
 import imageio as iio
-
+import cv2
 
 
 from usb.backend import libusb1
 
-stage_address = "/dev/cu.usbmodem14201"
+stage_address = "COM5" #"/dev/cu.usbmodem14201"
 
 class WPSpec(QtGui.QMainWindow):
     def __init__(self):
@@ -52,16 +52,20 @@ class WPSpec(QtGui.QMainWindow):
             self.checkSerial.setSingleShot(False)
             self.checkSerial.timeout.connect(lambda: self.check_serial())
             self.checkSerial.start(100)
+        except Exception as e:
+            print("Did not connect with stage")
+            print(e)
             
-            
-            self.webcam = iio.get_reader("<video1>")
+        try:
+            #self.webcam = iio.get_reader("<video0>", mode='i')
+            self.webcam = cv2.VideoCapture(0)
             self.checkCamera = QtCore.QTimer()
             self.checkCamera.setSingleShot(False)
             self.checkCamera.timeout.connect(lambda: self.display_image())
             self.checkCamera.start(50)
             
         except Exception as e:
-            print("Did not connect with stage")
+            print("Did not connect with webcam")
             print(e)
         
         try:        
@@ -115,26 +119,31 @@ class WPSpec(QtGui.QMainWindow):
         device_id = bus.device_ids[0]
         print("found %s" % device_id)
         
-        device = WasatchDevice(device_id)
-        if not device.connect():
-            print("connection failed")
+        try:
+            device = WasatchDevice(device_id)
+            if device is None or not device.connect():
+                print("connection failed")
+                sys.exit(1)
+            
+            print("connected to %s %s with %d wavenumbers from (%.2f, %.2f)" % (
+                device.settings.eeprom.model,
+                device.settings.eeprom.serial_number,
+                device.settings.pixels(),
+                device.settings.wavenumbers[0],
+                device.settings.wavenumbers[-1]))
+            
+            self.dev = device
+            self.fid = device.hardware
+            self.dev.hardware.set_integration_time_ms(self.integration_time)
+            self.dev.hardware.set_detector_gain(self.gain)
+            self.dev.settings.state.scans_to_average = self.averages
+            self.dev.settings.state.free_running_mode= False
+            self.dev.settings.state.raman_mode_enabled = True
+            self.wavenumbers = device.settings.wavenumbers[0:-5]
+        except Exception as e:
+            print("Failed to connect to Wasatch Bus")
+            print(e)
             sys.exit(1)
-        
-        print("connected to %s %s with %d wavenumbers from (%.2f, %.2f)" % (
-            device.settings.eeprom.model,
-            device.settings.eeprom.serial_number,
-            device.settings.pixels(),
-            device.settings.wavenumbers[0],
-            device.settings.wavenumbers[-1]))
-        
-        self.dev = device
-        self.fid = device.hardware
-        self.dev.hardware.set_integration_time_ms(self.integration_time)
-        self.dev.hardware.set_detector_gain(self.gain)
-        self.dev.settings.state.scans_to_average = self.averages
-        self.dev.settings.state.free_running_mode= False
-        self.dev.settings.state.raman_mode_enabled = True
-        self.wavenumbers = device.settings.wavenumbers[0:-5]
 
 
           
@@ -293,7 +302,11 @@ class WPSpec(QtGui.QMainWindow):
 # Camera    
 # =============================================================================
     def display_image(self):
-        frame = self.webcam.get_next_data()
+        #frame = self.webcam.get_next_data()
+        ret, frame = self.webcam.read()
+        if not ret:
+            raise RuntimeError("failed to grab frame")
+            
         
         image = np.rot90(frame,3) #        image flip (horizontal axis) and rotation (90 deg anti-clockwise)
         image = np.fliplr(image)
@@ -326,6 +339,21 @@ class WPSpec(QtGui.QMainWindow):
 
 
 if __name__ == '__main__':
+
+    
+    devices = []
+    for i in range(10):
+        try:
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                devices.append(i)
+                cap.release()
+        except:
+            pass
+    print("*" * 80)
+    print("DEVICES")
+    print(devices)
+    print("*" * 80)
     app = 0
     app = QtGui.QApplication(sys.argv)
     gui = WPSpec()
