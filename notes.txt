@@ -1,0 +1,15 @@
+* conda update conda
+* Used the wasatch conda-win10.yml (https://github.com/WasatchPhotonics/Wasatch.PY) and copied it into this repo
+* conda create --prefix ./envs
+* conda activate C:\Users\mbp20\Rover\envs
+conda install pip
+const install all other packages from simons py file and from conda-win10.yml in WasatchPhotonics repo
+conda install -c conda-forge pygtail pyusb seabreeze
+conda install -c anaconda pyqt
+conda install -c anaconda pyqtgraph
+conda install -c conda-forge imageio
+
+conda list --explicit > spec-file.txt
+conda env export > environment.yml
+
+
