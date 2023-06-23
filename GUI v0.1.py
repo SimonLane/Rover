@@ -16,7 +16,7 @@ import numpy as np
 from skimage.transform import rescale
 Polynomial = np.polynomial.Polynomial
 import csv, threading, queue
-import imageio.v2 as iio
+import imageio as iio
 
 
 class Rover(QtGui.QMainWindow):
@@ -24,8 +24,12 @@ class Rover(QtGui.QMainWindow):
         super(Rover, self).__init__()
         arm_address = "/dev/cu.usbmodem4305501"
         wheel_address = "/dev/cu.usbmodem134618801"
-        fps = 10
-
+        fps = 60
+        self.first_cam = True
+        self.spectrometer_connected = False
+        self.thread_to_GUI = queue.Queue()
+        self.thread_active = False
+        
         
         # # connect to power/arm board
         self.arm = serial.Serial(port=arm_address, baudrate=115200, timeout=0.5)
@@ -56,13 +60,21 @@ class Rover(QtGui.QMainWindow):
         
         # connect to cameras
         self.cam1 = iio.get_reader("<video1>")
-        self.cam2 = iio.get_reader("<video2>")
+        self.cam2 = iio.get_reader("<video0>")
 
         # build GUI
         self.initUI()
-        
-        
+
         # connect to spectrometer
+        try:
+            self.instalise_spectrometer()
+            self.spectrometer_connected = True
+        except Exception as e:
+            print("Did not connect with spectrometer")
+            print(e)
+            
+        
+            
         
  # TIMERS  
 # cameras
@@ -76,7 +88,80 @@ class Rover(QtGui.QMainWindow):
         self.getPowerReport.setSingleShot(False)
         self.getPowerReport.timeout.connect(lambda: self.update_power_arm())
         self.getPowerReport.start(5000) 
+# dummy spectra timer       
+        self.specTimer = QtCore.QTimer()
+        self.specTimer.setSingleShot(False)
+        self.specTimer.timeout.connect(lambda: self.grab_spectra())
+        self.specTimer.start(5000) 
+# task management       
+        self.task_checker = QtCore.QTimer()
+        self.task_checker.setSingleShot(False)
+        self.task_checker.timeout.connect(lambda: self.check_tasks())
+        self.task_checker.start(100)
+    
+    
+    def check_tasks(self):
+        if self.thread_to_GUI.qsize()>0:
+            print("spectra picked up from queue")
+            task = self.thread_to_GUI.get()
+            self.display_spectra(task[0])
+            self.thread_active = False
+            
+    def grab_spectra(self): #launches get_spectra() in a thread
+        print(" launching thread to get spectra ")
+        self.spectraThread = threading.Thread(target=self.get_spectra, name="get spectra", args=())
+        self.spectraThread.start()
+        self.thread_active = True
         
+    
+    def get_spectra(self):          #  get the spectra
+        print("thread started")
+        # DARK
+        self.dev.hardware.set_laser_enable(False)
+        time.sleep(self.integration_time/1000)
+        response = self.dev.acquire_spectrum()
+        d_spec = response.spectrum
+
+        # LIGHT
+        self.dev.hardware.set_laser_enable(True)
+        time.sleep(self.integration_time/1000)
+        response = self.dev.acquire_spectrum()
+        l_spec = response.spectrum
+        self.dev.hardware.set_laser_enable(False)
+        print("spectra acquired by thread")
+        # SUBTRACT
+        d_spec = np.array(d_spec)
+        l_spec = np.array(l_spec)
+        b_spec = self.normalise(np.subtract(l_spec,d_spec))
+        self.thread_to_GUI.put([b_spec])  #returns spectra via a queue (thread safe)
+        print("spectra added to queue")
+        
+    def display_spectra    
+    def instalise_spectrometer(self):
+        bus = WasatchBus()
+        device_id = bus.device_ids[0]
+        print("found %s" % device_id)
+        
+        device = WasatchDevice(device_id)
+        if not device.connect():
+            print("connection failed")
+            sys.exit(1)
+        
+        print("connected to %s %s with %d wavenumbers from (%.2f, %.2f)" % (
+            device.settings.eeprom.model,
+            device.settings.eeprom.serial_number,
+            device.settings.pixels(),
+            device.settings.wavenumbers[0],
+            device.settings.wavenumbers[-1]))
+        
+        self.dev = device
+        self.fid = device.hardware
+        self.dev.hardware.set_integration_time_ms(self.integration_time)
+        self.dev.hardware.set_detector_gain(self.gain)
+        self.dev.settings.state.scans_to_average = self.averages
+        self.dev.settings.state.free_running_mode= False
+        self.dev.settings.state.raman_mode_enabled = True
+        self.wavenumbers = device.settings.wavenumbers[0:-5]    
     def update_power_arm(self):
         self.arm.write(str.encode("/report_power;"))
         reply = self.arm.readline().strip()
@@ -84,16 +169,18 @@ class Rover(QtGui.QMainWindow):
     
     
     def display_cams(self):   
-        
-        fr1 = self.cam1.get_next_data()  # mast cam
-        im1 = np.rot90(fr1,3).copy() #        image flip (horizontal axis) and rotation (90 deg anti-clockwise)
-        im1 = np.fliplr(im1)
-        self.cam1plot.setImage(im1, autoLevels=True)
-
-        fr2 = self.cam2.get_next_data()  # arm cam
-        im2 = np.rot90(fr2,3).copy() #        image flip (horizontal axis) and rotation (90 deg anti-clockwise)
-        im2 = np.fliplr(im2)
-        self.cam2plot.setImage(im2, autoLevels=True)
+        if(self.first_cam):
+            fr1 = self.cam1.get_next_data()  # mast cam
+            im1 = np.rot90(fr1,3).copy() #        image flip (horizontal axis) and rotation (90 deg anti-clockwise)
+            im1 = np.fliplr(im1)
+            self.cam1plot.setImage(im1, autoLevels=True)
+            self.first_cam = False
+        else:
+            fr2 = self.cam2.get_next_data()  # arm cam
+            im2 = np.rot90(fr2,3).copy() #        image flip (horizontal axis) and rotation (90 deg anti-clockwise)
+            im2 = np.fliplr(im2)
+            self.cam2plot.setImage(im2, autoLevels=True)
+            self.first_cam = True
 
     
     def initUI(self):
@@ -187,11 +274,12 @@ class Rover(QtGui.QMainWindow):
     def closeEvent(self, event): #to do upon GUI being closed
         self.getCamFeed.stop()
         self.getPowerReport.stop()
-        # self.checkSerial.stop()
+        self.specTimer.stop()
+        self.task_checker.stop()
         self.arm.close()
         self.wheel.close()
-        # self.cam1.close()
-        # self.cam2.close()
+        self.cam1.close()
+        self.cam2.close()
         
 
 if __name__ == '__main__':
