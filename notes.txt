@@ -4,10 +4,12 @@
 * conda activate C:\Users\mbp20\Rover\envs
 conda install pip
 const install all other packages from simons py file and from conda-win10.yml in WasatchPhotonics repo
-conda install -c conda-forge pygtail pyusb seabreeze
-conda install -c anaconda pyqt
-conda install -c anaconda pyqtgraph
-conda install -c conda-forge imageio
+
+
+
+
+conda install -c conda-forge pygtail pyusb seabreeze imageio
+conda install -c anaconda pyqt pyqtgraph
 
 # Install OpenCV
 conda config --add channels conda-forge
@@ -34,3 +36,15 @@ conda list --explicit > spec-file.txt
 conda env export > environment.yml
 
 
+
+
+
+
+
+
+
+conda env create -f environment2.yml
+conda activate rover-win-env
+
+copy libusb0.dll C:\Users\mbp20\AppData\Local\anaconda3\envs\rover-win-env
+pip install opencv_python-4.5.5-cp311-cp311-win_amd64.whl

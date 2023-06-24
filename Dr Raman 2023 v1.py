@@ -10,25 +10,33 @@ Outreach Spectrometer GUI
 from wasatch.WasatchBus    import WasatchBus
 from wasatch.WasatchDevice import WasatchDevice
 
-
-from PyQt5 import QtGui, QtCore, Qt
-import sys, time, serial, glob
+from PyQt5 import QtGui, QtCore, QtWidgets
+import sys, time, serial
 import pyqtgraph as pg
 import numpy as np
-Polynomial = np.polynomial.Polynomial
-import csv, threading, queue
-import imageio as iio
+import csv
+import threading
+import queue
 import cv2
+Polynomial = np.polynomial.Polynomial
 
+from usb.backend import libusb1 # << WHY?
 
-from usb.backend import libusb1
+import logging
+root = logging.getLogger()
+root.setLevel(logging.DEBUG)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+root.addHandler(handler)
 
 stage_address = "COM5" #"/dev/cu.usbmodem14201"
 
-class WPSpec(QtGui.QMainWindow):
+class WPSpec(QtWidgets.QMainWindow):
     def __init__(self):
         super(WPSpec, self).__init__()
-        
         
         #test data
         self.spectra = []
@@ -55,6 +63,7 @@ class WPSpec(QtGui.QMainWindow):
         except Exception as e:
             print("Did not connect with stage")
             print(e)
+            sys.exit(1)
             
         try:
             #self.webcam = iio.get_reader("<video0>", mode='i')
@@ -67,13 +76,15 @@ class WPSpec(QtGui.QMainWindow):
         except Exception as e:
             print("Did not connect with webcam")
             print(e)
+            sys.exit(1)
         
         try:        
             self.instalise_spectrometer()
 
         except Exception as e:
             print("Did not connect with spectrometer")
-            print(e)
+            print(f"Reason: {e}")
+            sys.exit(1)
                 
         with open('data.csv') as csvDataFile:
             csvReader = csv.reader(csvDataFile)
@@ -116,6 +127,10 @@ class WPSpec(QtGui.QMainWindow):
         
     def instalise_spectrometer(self):
         bus = WasatchBus()
+
+        if bus.is_empty():
+            raise RuntimeError("Could not find any spectrometer devices")
+
         device_id = bus.device_ids[0]
         print("found %s" % device_id)
         
@@ -153,17 +168,13 @@ class WPSpec(QtGui.QMainWindow):
     def initUI(self):
 
         self.setWindowTitle('Outreach Spectrometer GUI')
-#        palette = QtGui.QPalette()
-#        palette.setColor(QtGui.QPalette.Background, QtGui.QColor(80,80,80))
-#        self.setPalette(palette)
-        
-        sizePolicyMin = QtGui.QSizePolicy(QtGui.QSizePolicy.Minimum, QtGui.QSizePolicy.Minimum)
+        sizePolicyMin = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
         sizePolicyMin.setHorizontalStretch(0)
         sizePolicyMin.setVerticalStretch(0)
-        screen       =  QtGui.QApplication.desktop().screenGeometry().getCoords()
+        screen       =  QtWidgets.QApplication.desktop().screenGeometry().getCoords()
         screenHeight = screen[-1]
         screenWidth  = screen[-2]
-        self.setGeometry(0, 0, screenWidth*0.8, screenHeight*0.8)
+        self.setGeometry(0, 0, int(screenWidth*0.8), int(screenHeight*0.8))
         
         
         
@@ -175,10 +186,10 @@ class WPSpec(QtGui.QMainWindow):
         #TEXT
         newfont = QtGui.QFont("Times", 90, QtGui.QFont.Bold) 
         
-        self.P1                         = QtGui.QLabel('1') 
-        self.P2                         = QtGui.QLabel('2')
-        self.P3                         = QtGui.QLabel('3')
-        self.P4                         = QtGui.QLabel('4')
+        self.P1                         = QtWidgets.QLabel('1') 
+        self.P2                         = QtWidgets.QLabel('2')
+        self.P3                         = QtWidgets.QLabel('3')
+        self.P4                         = QtWidgets.QLabel('4')
         for i in(self.P1,self.P2,self.P3,self.P4):
             i.setFont(newfont)
             i.setStyleSheet("border: 3px solid white;")
@@ -202,8 +213,8 @@ class WPSpec(QtGui.QMainWindow):
 #==============================================================================
 # Overall assembly
 #==============================================================================
-        self.WidgetGroup                   = QtGui.QGroupBox('')
-        self.WidgetGroup.setLayout(QtGui.QGridLayout())
+        self.WidgetGroup                   = QtWidgets.QGroupBox('')
+        self.WidgetGroup.setLayout(QtWidgets.QGridLayout())
         self.WidgetGroup.layout().addWidget(self.plot_1,                     0,8,3,8) 
         self.WidgetGroup.layout().addWidget(self.plot_2,                     3,8,3,8) 
         self.WidgetGroup.layout().addWidget(self.plot_3,                     6,8,3,8) 
@@ -355,7 +366,7 @@ if __name__ == '__main__':
     print(devices)
     print("*" * 80)
     app = 0
-    app = QtGui.QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)
     gui = WPSpec()
     gui.show()
     app.exec_()
