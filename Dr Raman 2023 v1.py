@@ -10,25 +10,33 @@ Outreach Spectrometer GUI
 from wasatch.WasatchBus    import WasatchBus
 from wasatch.WasatchDevice import WasatchDevice
 
-
-from PyQt5 import QtGui, QtCore, Qt
-import sys, time, serial, glob
+from PyQt5 import QtGui, QtCore, QtWidgets
+import sys, time, serial
 import pyqtgraph as pg
 import numpy as np
+import csv
+import threading
+import queue
+import cv2
 Polynomial = np.polynomial.Polynomial
-import csv, threading, queue
-import imageio as iio
 
+from usb.backend import libusb1 # << WHY?
 
+import logging
+root = logging.getLogger()
+root.setLevel(logging.DEBUG)
 
-from usb.backend import libusb1
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+root.addHandler(handler)
 
-stage_address = "/dev/cu.usbmodem14201"
+stage_address = "COM5" #"/dev/cu.usbmodem14201"
 
-class WPSpec(QtGui.QMainWindow):
+class WPSpec(QtWidgets.QMainWindow):
     def __init__(self):
         super(WPSpec, self).__init__()
-        
         
         #test data
         self.spectra = []
@@ -52,24 +60,31 @@ class WPSpec(QtGui.QMainWindow):
             self.checkSerial.setSingleShot(False)
             self.checkSerial.timeout.connect(lambda: self.check_serial())
             self.checkSerial.start(100)
+        except Exception as e:
+            print("Did not connect with stage")
+            print(e)
+            #sys.exit(1)
             
-            
-            self.webcam = iio.get_reader("<video1>")
+        try:
+            #self.webcam = iio.get_reader("<video0>", mode='i')
+            self.webcam = cv2.VideoCapture(0)
             self.checkCamera = QtCore.QTimer()
             self.checkCamera.setSingleShot(False)
             self.checkCamera.timeout.connect(lambda: self.display_image())
             self.checkCamera.start(50)
             
         except Exception as e:
-            print("Did not connect with stage")
+            print("Did not connect with webcam")
             print(e)
+            #sys.exit(1)
         
         try:        
             self.instalise_spectrometer()
 
         except Exception as e:
             print("Did not connect with spectrometer")
-            print(e)
+            print(f"Reason: {e}")
+            #sys.exit(1)
                 
         with open('data.csv') as csvDataFile:
             csvReader = csv.reader(csvDataFile)
@@ -112,29 +127,38 @@ class WPSpec(QtGui.QMainWindow):
         
     def instalise_spectrometer(self):
         bus = WasatchBus()
+
+        if bus.is_empty():
+            raise RuntimeError("Could not find any spectrometer devices")
+
         device_id = bus.device_ids[0]
         print("found %s" % device_id)
         
-        device = WasatchDevice(device_id)
-        if not device.connect():
-            print("connection failed")
-            sys.exit(1)
-        
-        print("connected to %s %s with %d wavenumbers from (%.2f, %.2f)" % (
-            device.settings.eeprom.model,
-            device.settings.eeprom.serial_number,
-            device.settings.pixels(),
-            device.settings.wavenumbers[0],
-            device.settings.wavenumbers[-1]))
-        
-        self.dev = device
-        self.fid = device.hardware
-        self.dev.hardware.set_integration_time_ms(self.integration_time)
-        self.dev.hardware.set_detector_gain(self.gain)
-        self.dev.settings.state.scans_to_average = self.averages
-        self.dev.settings.state.free_running_mode= False
-        self.dev.settings.state.raman_mode_enabled = True
-        self.wavenumbers = device.settings.wavenumbers[0:-5]
+        try:
+            device = WasatchDevice(device_id)
+            if device is None or not device.connect():
+                print("connection failed")
+                #sys.exit(1)
+            
+            print("connected to %s %s with %d wavenumbers from (%.2f, %.2f)" % (
+                device.settings.eeprom.model,
+                device.settings.eeprom.serial_number,
+                device.settings.pixels(),
+                device.settings.wavenumbers[0],
+                device.settings.wavenumbers[-1]))
+            
+            self.dev = device
+            self.fid = device.hardware
+            self.dev.hardware.set_integration_time_ms(self.integration_time)
+            self.dev.hardware.set_detector_gain(self.gain)
+            self.dev.settings.state.scans_to_average = self.averages
+            self.dev.settings.state.free_running_mode= False
+            self.dev.settings.state.raman_mode_enabled = True
+            self.wavenumbers = device.settings.wavenumbers[0:-5]
+        except Exception as e:
+            print("Failed to connect to Wasatch Bus")
+            print(e)
+            #sys.exit(1)
 
 
           
@@ -144,17 +168,13 @@ class WPSpec(QtGui.QMainWindow):
     def initUI(self):
 
         self.setWindowTitle('Outreach Spectrometer GUI')
-#        palette = QtGui.QPalette()
-#        palette.setColor(QtGui.QPalette.Background, QtGui.QColor(80,80,80))
-#        self.setPalette(palette)
-        
-        sizePolicyMin = QtGui.QSizePolicy(QtGui.QSizePolicy.Minimum, QtGui.QSizePolicy.Minimum)
+        sizePolicyMin = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Minimum)
         sizePolicyMin.setHorizontalStretch(0)
         sizePolicyMin.setVerticalStretch(0)
-        screen       =  QtGui.QApplication.desktop().screenGeometry().getCoords()
+        screen       =  QtWidgets.QApplication.desktop().screenGeometry().getCoords()
         screenHeight = screen[-1]
         screenWidth  = screen[-2]
-        self.setGeometry(0, 0, screenWidth*0.8, screenHeight*0.8)
+        self.setGeometry(0, 0, int(screenWidth*0.8), int(screenHeight*0.8))
         
         
         
@@ -166,10 +186,10 @@ class WPSpec(QtGui.QMainWindow):
         #TEXT
         newfont = QtGui.QFont("Times", 90, QtGui.QFont.Bold) 
         
-        self.P1                         = QtGui.QLabel('1') 
-        self.P2                         = QtGui.QLabel('2')
-        self.P3                         = QtGui.QLabel('3')
-        self.P4                         = QtGui.QLabel('4')
+        self.P1                         = QtWidgets.QLabel('1') 
+        self.P2                         = QtWidgets.QLabel('2')
+        self.P3                         = QtWidgets.QLabel('3')
+        self.P4                         = QtWidgets.QLabel('4')
         for i in(self.P1,self.P2,self.P3,self.P4):
             i.setFont(newfont)
             i.setStyleSheet("border: 3px solid white;")
@@ -193,8 +213,8 @@ class WPSpec(QtGui.QMainWindow):
 #==============================================================================
 # Overall assembly
 #==============================================================================
-        self.WidgetGroup                   = QtGui.QGroupBox('')
-        self.WidgetGroup.setLayout(QtGui.QGridLayout())
+        self.WidgetGroup                   = QtWidgets.QGroupBox('')
+        self.WidgetGroup.setLayout(QtWidgets.QGridLayout())
         self.WidgetGroup.layout().addWidget(self.plot_1,                     0,8,3,8) 
         self.WidgetGroup.layout().addWidget(self.plot_2,                     3,8,3,8) 
         self.WidgetGroup.layout().addWidget(self.plot_3,                     6,8,3,8) 
@@ -293,7 +313,12 @@ class WPSpec(QtGui.QMainWindow):
 # Camera    
 # =============================================================================
     def display_image(self):
-        frame = self.webcam.get_next_data()
+        #frame = self.webcam.get_next_data()
+        ret, frame = self.webcam.read()
+        if not ret:
+            self.checkCamera.stop()
+            raise RuntimeError("failed to grab frame, stopping timer")
+            
         
         image = np.rot90(frame,3) #        image flip (horizontal axis) and rotation (90 deg anti-clockwise)
         image = np.fliplr(image)
@@ -326,8 +351,23 @@ class WPSpec(QtGui.QMainWindow):
 
 
 if __name__ == '__main__':
+
+    
+    devices = []
+    for i in range(10):
+        try:
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                devices.append(i)
+                cap.release()
+        except:
+            pass
+    print("*" * 80)
+    print("DEVICES")
+    print(devices)
+    print("*" * 80)
     app = 0
-    app = QtGui.QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)
     gui = WPSpec()
     gui.show()
     app.exec_()
