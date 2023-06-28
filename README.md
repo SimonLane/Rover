@@ -14,7 +14,7 @@ chmod +x Mambaforge-Linux-aarch64.sh
 
 Once the install has completed you can delete the install script like so:
 
-``
+```
 rm ./Mambaforge-Linux-aarch64.sh
 ```
 
