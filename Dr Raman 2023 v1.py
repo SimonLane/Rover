@@ -86,11 +86,13 @@ class WPSpec(QtWidgets.QMainWindow):
             print(f"Reason: {e}")
             sys.exit(1)
                 
-        with open('data.csv') as csvDataFile:
-            csvReader = csv.reader(csvDataFile)
-            for row in csvReader:
-                self.wavenumber.append(float(row[0]))
-            self.wavenumber = self.wavenumber[0:1947]
+        #with open('data.csv') as csvDataFile:
+        #    csvReader = csv.reader(csvDataFile)
+        #    for row in csvReader:
+        #        self.wavenumber.append(float(row[0]))
+        #    print(f"Lenght blah {len(self.wavenumber)}")
+        #    sys.exit(2)
+        #    self.wavenumber = self.wavenumber[0:1947]
         
         
 
@@ -154,7 +156,7 @@ class WPSpec(QtWidgets.QMainWindow):
             self.dev.settings.state.scans_to_average = self.averages
             self.dev.settings.state.free_running_mode= False
             self.dev.settings.state.raman_mode_enabled = True
-            self.wavenumbers = device.settings.wavenumbers[0:-5]
+            self.wavenumber = device.settings.wavenumbers[0:-5]
         except Exception as e:
             print("Failed to connect to Wasatch Bus")
             print(e)
@@ -266,13 +268,21 @@ class WPSpec(QtWidgets.QMainWindow):
             # DARK
             self.dev.hardware.set_laser_enable(False)
             time.sleep(self.integration_time/1000)
-            response = self.dev.acquire_spectrum()
+            response = self.dev.hardware.get_line().data
+            print(response)
+            print(dir(response))
+            print(type(response.spectrum))
+            print(dir(response.spectrum))
+            sys.stdout.flush()
             d_spec = response.spectrum
+            print("YAY WE DID IT")
+            sys.stdout.flush()
 
             # LIGHT
             self.dev.hardware.set_laser_enable(True)
             time.sleep(self.integration_time/1000)
-            response = self.dev.acquire_spectrum()
+            #response = self.dev.acquire_spectrum()
+            response = self.dev.hardware.get_line().data
             
             l_spec = response.spectrum
             self.dev.hardware.set_laser_enable(False)
@@ -307,6 +317,8 @@ class WPSpec(QtWidgets.QMainWindow):
         
         self.plots_drawn[pos] = 1
         # self.plots[pos].getPlotItem().clear()
+        print(len(self.wavenumber))
+        print(spectra.shape)
         self.plots[pos].plot(x=self.wavenumber,y=spectra[0:-5])
 
 # =============================================================================
