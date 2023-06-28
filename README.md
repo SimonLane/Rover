@@ -2,6 +2,10 @@
 
 This is a Linux port of [Simon Lane's](https://github.com/SimonLane) original "Dr Raman" scripts to linux. Its not much of a port... most of the effort was spent figuring out how to install all the required dependencies. In the end the Mamba distribution and package manager did the trick, having gone down many rabit holes using raw Python and PyEnv...
 
+Using Python 3.10.12:
+```
+Python 3.10.12 | packaged by conda-forge | (main, Jun 23 2023, 22:28:59) [GCC 12.3.0] on linux
+```
 
 # Installing Mamba
 Open a terminal windows and type the following, accepting the license and following the on-screen instructions.
