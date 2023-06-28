@@ -22,17 +22,17 @@ Polynomial = np.polynomial.Polynomial
 
 from usb.backend import libusb1 # << WHY?
 
-import logging
-root = logging.getLogger()
-root.setLevel(logging.DEBUG)
+#import logging
+#root = logging.getLogger()
+#root.setLevel(logging.DEBUG)
+#
+#handler = logging.StreamHandler(sys.stdout)
+#handler.setLevel(logging.DEBUG)
+#formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+#handler.setFormatter(formatter)
+#root.addHandler(handler)
 
-handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-root.addHandler(handler)
-
-stage_address = "COM5" #"/dev/cu.usbmodem14201"
+stage_address = "/dev/ttyACM0"
 
 class WPSpec(QtWidgets.QMainWindow):
     def __init__(self):
@@ -63,7 +63,7 @@ class WPSpec(QtWidgets.QMainWindow):
         except Exception as e:
             print("Did not connect with stage")
             print(e)
-            #sys.exit(1)
+            sys.exit(1)
             
         try:
             #self.webcam = iio.get_reader("<video0>", mode='i')
@@ -76,7 +76,7 @@ class WPSpec(QtWidgets.QMainWindow):
         except Exception as e:
             print("Did not connect with webcam")
             print(e)
-            #sys.exit(1)
+            sys.exit(1)
         
         try:        
             self.instalise_spectrometer()
@@ -84,7 +84,7 @@ class WPSpec(QtWidgets.QMainWindow):
         except Exception as e:
             print("Did not connect with spectrometer")
             print(f"Reason: {e}")
-            #sys.exit(1)
+            sys.exit(1)
                 
         with open('data.csv') as csvDataFile:
             csvReader = csv.reader(csvDataFile)

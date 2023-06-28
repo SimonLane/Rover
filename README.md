@@ -71,6 +71,14 @@ sudo udevadm control --reload
 
 Connect the spectrometer
 
+## Giving User Permission To Use Serial Devices
+FOr the user, in this case radxa, to access serial device it must be added to the `dialout` group like so:
+
+```
+sudo usermod -a -G dialout radxa
+```
+
+Once added you must log out and log back in again.
 
 # Running the script
 Type
