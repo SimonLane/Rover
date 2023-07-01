@@ -42,7 +42,7 @@ class Rover(QtWidgets.QMainWindow):
         self.laser_power = 100
         self.bat_p = [0,0] #battery percentage
         self.bat_v = [16.6,16.6] #battery voltage
-        self.use_uCs = False
+        self.use_uCs = True
         self.camRate = 50 #(ms between frame grabs)
         
 #         varables for Rover controllers
@@ -61,6 +61,7 @@ class Rover(QtWidgets.QMainWindow):
                 time.sleep(1.0)
         self.X1C = Gamepad.XboxTWO(joystickNumber=0)
         print('Adaptive Controller connected :)',self.X1C.joystickNumber)
+        sys.stdout.flush()
         
         if not Gamepad.available():
             print('Please connect Xbox Adaptive Controller...')
@@ -68,6 +69,7 @@ class Rover(QtWidgets.QMainWindow):
                 time.sleep(1.0)
         self.X2C = Gamepad.XboxONE(joystickNumber=1)
         print('Handheld controller connected :)',self.X2C.joystickNumber)
+        sys.stdout.flush()
         
         self.X1C.startBackgroundUpdates()
         self.X2C.startBackgroundUpdates()
@@ -136,6 +138,8 @@ class Rover(QtWidgets.QMainWindow):
         
 # Connect to TEENSY BOARDS
         if self.use_uCs:
+            arm_address = None
+            wheel_address = None
             ports = list(serial.tools.list_ports.comports())
             str_ports = []
             for p in ports:
@@ -153,23 +157,29 @@ class Rover(QtWidgets.QMainWindow):
                 reply = p.readline().strip()
 #                 print('reply:',reply)
                 if reply == b'power and arm board':
-#                     print('match: power n arm')
+                    print('match: power n arm')
                     arm_address = port
                 if reply == b'wheels board':
-#                     print('match: wheels')
+                    print('match: wheels')
                     wheel_address = port
                 p.close()
+
+            if arm_address is None:
+                raise RuntimeError("Failed to find ARM address")
+
+            if wheel_address is None:
+                raise RuntimeError("Failed to find WHEEL address")
             
 # connect to power/arm board
-            self.arm = serial.Serial(port=arm_address, baudrate=115200, timeout=0.5)
+            self.arm_serial = serial.Serial(port=arm_address, baudrate=115200, timeout=0.5)
             time.sleep(0.5) #essential to have this delay!
-            self.arm.write(str.encode("/hello;\n"))
-            reply = self.arm.readline().strip()
+            self.arm_serial.write(str.encode("/hello;\n"))
+            reply = self.arm_serial.readline().strip()
 #             print('reply:',reply)
             if reply == b'power and arm board': print('power board connection established')
             else:
                 print('power board connection failed')
-                self.arm.close()
+                self.arm_serial.close()
 # connect to wheels board
             self.wheel = serial.Serial(port=wheel_address, baudrate=115200, timeout=0.5)
             time.sleep(0.5) #essential to have this delay!
@@ -214,10 +224,12 @@ class Rover(QtWidgets.QMainWindow):
         self.task_checker.timeout.connect(lambda: self.check_tasks())
         self.task_checker.start(100)
 # game controller check    
-        self.game_checker = QtCore.QTimer()
-        self.game_checker.setSingleShot(False)
-        self.game_checker.timeout.connect(lambda: self.check_controllers())
-        self.game_checker.start(100)
+        sys.stdout.flush()
+        if self.use_uCs:
+            self.game_checker = QtCore.QTimer()
+            self.game_checker.setSingleShot(False)
+            self.game_checker.timeout.connect(lambda: self.check_controllers())
+            self.game_checker.start(100)
 
     
     def buttonPress(self,controller, button):
@@ -249,7 +261,8 @@ class Rover(QtWidgets.QMainWindow):
     
     def check_controllers(self):
         if self.mode == 1:
-            self.arm.write(str.encode("/speed.%s.%s;" %(self.speed,self.turn)))
+            self.arm_serial.write(str.encode("/speed.%s.%s;" %(self.speed,self.turn)))
+
         if self.mode == 2:
             print(self.arm_speed)
             print(self.arm_turn)
@@ -331,8 +344,8 @@ class Rover(QtWidgets.QMainWindow):
         return smoothed
     
     def update_power_arm(self):
-        self.arm.write(str.encode("/report.power;"))
-        reply = self.arm.readline().strip()
+        self.arm_serial.write(str.encode("/report.power;"))
+        reply = self.arm_serial.readline().strip()
         power_data = reply.decode("utf-8").split("\t")
         self.bat_v = [float(power_data[1]),float(power_data[3])]
         self.bat_p[0] = max(    ((self.bat_v[0]-16.6)/4.2)*100.0,0) # express as percentage
@@ -469,7 +482,7 @@ class Rover(QtWidgets.QMainWindow):
         self.task_checker.stop()
         if self.use_uCs:
             self.getPowerReport.stop()
-            self.arm.close()
+            self.arm_serial.close()
             self.wheel.close()
         
         self.getCamFeed.stop()
