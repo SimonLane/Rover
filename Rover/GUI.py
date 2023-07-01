@@ -249,7 +249,7 @@ class Rover(QtWidgets.QMainWindow):
     
     def check_controllers(self):
         if self.mode == 1:
-            self.arm_board.write(str.encode("/speed.%s.%s;" %(self.speed,self.turn)))
+            self.arm.write(str.encode("/speed.%s.%s;" %(self.speed,self.turn)))
         if self.mode == 2:
             print(self.arm_speed)
             print(self.arm_turn)

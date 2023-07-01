@@ -17,6 +17,7 @@ import struct
 import time
 import threading
 import inspect
+import select
 
 def available(joystickNumber = 0):
     """Check if a joystick is connected and ready to use."""
@@ -56,15 +57,25 @@ class Gamepad:
                 self.gamepad = None
                 raise
 
+    def _readJoystickFile(self):
+        readable_fds = []
+        data = b''
+        while self.updateThread.running:
+            readable_fds, _, _ = select.select(self.joyReadFds, [], [], 1)
+            if self.joyFile in readable_fds:
+                return os.read(self.joyFile, self.eventSize)
+        return data
+
     def __init__(self, joystickNumber = 0):
         self.joystickNumber = str(joystickNumber)
         self.joystickPath = '/dev/input/js' + self.joystickNumber
         retryCount = 5
         while True:
             try:
-                self.joystickFile = open(self.joystickPath, 'rb')
+                self.joyFile = os.open(self.joystickPath, os.O_RDONLY | os.O_NONBLOCK)
+                self.joyReadFds = {self.joyFile}
                 break
-            except IOError as e:
+            except Exception as e:
                 retryCount -= 1
                 if retryCount > 0:
                     time.sleep(0.5)
@@ -89,7 +100,7 @@ class Gamepad:
 
     def __del__(self):
         try:
-            self.joystickFile.close()
+            os.close(self.joyFile) #self.joystickFile.close()
         except AttributeError:
             pass
 
@@ -107,14 +118,17 @@ class Gamepad:
         Throws an IOError if the gamepad is disconnected"""
         if self.connected:
             try:
-                rawEvent = self.joystickFile.read(self.eventSize)
+                rawEvent = self._readJoystickFile() #self.joystickFile.read(self.eventSize)
             except IOError as e:
                 self.connected = False
-                raise IOError('Gamepad %s disconnected: %s' % (self.joystickNumber, str(e)))
+                raise IOError('Gamepad %s disconnected: %s' % (self.joystickNumber, str(e))) from e
+            
             if rawEvent is None:
                 self.connected = False
                 raise IOError('Gamepad %s disconnected' % self.joystickNumber)
             else:
+                if len(rawEvent) == 0:
+                    return None, None, None, None
                 return struct.unpack('IhBB', rawEvent)
         else:
             raise IOError('Gamepad has been disconnected')
@@ -177,6 +191,10 @@ class Gamepad:
 
         Throws an IOError if the gamepad is disconnected"""
         self.lastTimestamp, value, eventType, index = self._getNextEventRaw()
+
+        if self.lastTimestamp is None and value is None and eventType is None and index is None:
+            return None, None, None
+
         skip = False
         eventName = None
         entityName = None
@@ -247,9 +265,12 @@ class Gamepad:
 
     def updateState(self):
         """Updates the internal button and axis states with the next pending event.
-
         This call waits for a new event if there are not any waiting to be processed."""
         self.lastTimestamp, value, eventType, index = self._getNextEventRaw()
+        
+        if self.lastTimestamp is None and value is None and eventType is None and index is None:
+            return
+
         if eventType == Gamepad.EVENT_CODE_BUTTON:
             if value == 0:
                 finalValue = False
@@ -306,6 +327,9 @@ class Gamepad:
         The thread will stop on the next event after this call was made."""
         if self.updateThread is not None:
             self.updateThread.running = False
+            print("Waiting for update thread to die")
+            self.updateThread.join()
+            print("Udpate thread died")
 
     def isReady(self):
         """Used with updateState to indicate that the gamepad is now ready for use.
@@ -536,10 +560,11 @@ class Gamepad:
 
     def disconnect(self):
         """Cleanly disconnect and remove any threads and event handlers."""
+        print("Disconnection XBOX controller")
         self.connected = False
         self.removeAllEventHandlers()
         self.stopBackgroundUpdates()
-        del self.joystickFile
+        os.close(self.joyFile)
 
 ###########################
 # Import gamepad mappings #
