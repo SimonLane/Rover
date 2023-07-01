@@ -1,0 +1,3 @@
+sudo chmod 660 /dev/ttyAMA0 
+mamba activate xbox
+cd Desktop/

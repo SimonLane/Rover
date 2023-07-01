@@ -1,0 +1,5 @@
+Installing PyGame
+-----------------
+Why we got illegal instruction? Answer here: https://stackoverflow.com/a/48710959
+sudo apt install libsdl2-dev
+pip install --no-binary pygame pygame
